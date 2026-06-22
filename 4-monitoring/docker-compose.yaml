@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  fastapi:
+    build: .  # Собирает из Dockerfile в текущей директории
+    container_name: music_app
+    ports:
+      - "8081:8000"
+    restart: on-failure:5
+    mem_limit: "2g"
+    cpus: "3.0"
+    networks:
+      - monitoring
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    ports:
+     - "8082:8080"
+    command:
+     - "--docker_only=true" # собираем статистику только для контейнеров
+     - "--housekeeping_interval=10s"  # собираем статистику каждые 10 секунд
+     - "--storage_duration=2m"  # храним статистику за последние пару минут
+    volumes:
+     - /sys:/sys:ro # для сбора статистики по конкретным контейнерам
+     - /var/lib/docker/:/var/lib/docker:ro # для доступа к метаинформации контейнеров
+     - /var/run/docker.sock:/var/run/docker.sock:ro # доступ к сокету docker
+    networks:
+     - monitoring
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - monitoring
+
+  grafana:
+     image: grafana/grafana
+     container_name: grafana
+     ports:
+      - "3000:3000"
+     environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+     volumes:
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro  # JSON дашборды
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro  # источники
+      - ./grafana/config/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro  # конфигурация
+     networks:
+      - monitoring
+
+  # сборщик логов
+  loki:
+    image: grafana/loki:2.9.1
+    container_name: loki
+    ports:
+      - 3100:3100
+    command: -config.file=/etc/loki/local-config.yaml -print-config-stderr=true
+    hostname: loki
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  # источник логов
+  promtail:
+    image: grafana/promtail:2.9.1
+    container_name: promtail
+    volumes:
+      - ./grafana/promtail/config.yml:/etc/promtail/config.yml:ro  # Его мы создадим в шаге 2
+      # отсюда берём названия и логи контейнеров
+      - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml -print-config-stderr=true
+    hostname: promtail
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+
+  pushgateway:
+    image: prom/pushgateway
+    container_name: pushgateway
+    ports:
+     - "9091:9091" # пробрасываем порт с хоста в сеть контейнера
+    networks:
+     - monitoring
+
+networks:
+  monitoring:
+    driver: bridge

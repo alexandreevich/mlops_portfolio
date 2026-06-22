@@ -1,0 +1,7 @@
+global:
+  scrape_interval: 10s # каждые 10 секунд берем данные из cAdvisor
+
+scrape_configs:
+  - job_name: 'cadvisor' # джоба для запроса /metrics из cAdvisor
+    static_configs:
+      - targets: ['cadvisor:8080'] # Работаем в докер сети и можем обращаться сразу на требуемый порт к cAdvisor

@@ -1,0 +1,18 @@
+
+Latency for onnx (s):
+  Runs:  1000
+  Min:  0.313
+  Mean: 0.338
+  P50:  0.336
+  P95:  0.357
+  P99:  0.378
+  Max:  0.649
+
+Latency for sklearn(s):
+  Runs:  1000
+  Min:  1.213
+  Mean: 1.291
+  P50:  1.283
+  P95:  1.352
+  P99:  1.425
+  Max:  2.109
