@@ -1,0 +1,11 @@
+.idea
+.venv
+.gitkeep
+catboost_info
+*.parquet
+*.pkl
+__pycache__
+*.csv
+clearml.conf
+start-line.md
+new-cluster-config.yaml

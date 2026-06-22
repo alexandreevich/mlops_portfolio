@@ -1,0 +1,20 @@
+[project]
+name = "for-gitlab"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "clearml==2.0.2",
+    "fsspec==2025.9.0",
+    "optuna>=4.9.0",
+    "s3fs==2025.9.0",
+]
+
+[tool.mypy]
+ignore_missing_imports = true
+mypy_path = ["src/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

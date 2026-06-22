@@ -1,0 +1,30 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: simonov-inference
+  namespace: r-mlops-k8s-12-1-1-854415502
+spec:
+  predictor:
+    annotations:
+      autoscaling.knative.dev/minScale: "1"           # минимум 1 под
+      autoscaling.knative.dev/maxScale: "3"           # максимум 5 подов
+      autoscaling.knative.dev/initial-scale: "1"      # старт с 2 подов
+      autoscaling.knative.dev/metric: "rps"   # метрика автоскейла
+      autoscaling.knative.dev/target: "50"            # целевая нагрузка
+      autoscaling.knative.dev/targetUtilizationPercentage: "70"
+    # здесь мы указываем количество подов
+    serviceAccountName: sa-simonov
+    model: 
+      modelFormat:
+        name: sklearn # тип фреймворка для pkl
+      args: ["--enable_docs_url=True"]
+      protocolVersion: v2
+      runtime: kserve-sklearnserver
+      storageUri: "s3://r-mlops-bucket-12-1-1-854415502/best_model/ranker.pkl"
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "512Mi"
+
+          
+    # здесь мы указываем, какая модель будет крутиться и ресурсы

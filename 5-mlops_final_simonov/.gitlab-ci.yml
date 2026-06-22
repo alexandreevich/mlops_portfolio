@@ -1,0 +1,147 @@
+default:
+  tags: [k8s]
+  image: python:3.12-bookworm
+
+# Локальные переменные для работы манифеста.
+variables:
+  VENV_PATH: "$CI_PROJECT_DIR/.venv"
+  PYTHON_VERSION: "3.12"
+  S3_BUCKET_NAME: "r-mlops-bucket-12-1-1-418299928"
+  S3_ENDPOINT_URL: "https://storage.yandexcloud.net"
+  AWS_DEFAULT_REGION: "ru-central1"
+
+stages:
+  - lint
+  - prepare_data
+  - train
+  - test
+  - build
+  - save
+  - release
+  
+ #Якорь с установкой и активацией окружения
+.setup_venv: &setup_venv
+  before_script:
+    - export PATH="$HOME/.local/bin:$VENV_PATH/bin:$PATH"
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - export UV_LINK_MODE=copy
+    - uv venv --python $PYTHON_VERSION $VENV_PATH
+    - source $VENV_PATH/bin/activate
+    - uv pip install -r requirements.txt
+
+linter:
+  stage: lint
+  <<: *setup_venv
+  script:
+    - ruff check . # Запускаем линтер
+
+formater:
+  stage: lint
+  <<: *setup_venv
+  script:
+    - ruff format --check . # Запускам форматтер
+
+mypy_check:
+  stage: lint
+  <<: *setup_venv
+  script:
+    - mypy . --explicit-package-bases # Запускаем статическую проверку типов
+
+
+# скрипт перенесен в Airflow
+
+# prepare_data: 
+#   stage: prepare_data
+#   <<: *setup_venv
+#   script:
+#     - cd src/
+#     - export AWS_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID
+#     - export AWS_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY
+#     - aws s3 cp s3://r-mlops-bucket-12-1-1-854415502/raw_data/item_properties_part1.csv . --endpoint-url $S3_ENDPOINT_URL
+#     - aws s3 cp s3://r-mlops-bucket-12-1-1-854415502/raw_data/events.csv . --endpoint-url $S3_ENDPOINT_URL
+#     - ls -la 
+#     - python3 prepare_features.py
+#     - mv data_for_training.parquet $CI_PROJECT_DIR/data_for_training.parquet
+#     - mv item_features.parquet $CI_PROJECT_DIR/item_features.parquet
+#   artifacts:
+#     paths:
+#       - data_for_training.parquet
+#       - item_features.parquet
+#     expire_in: 20 minutes
+#   retry:
+#     max: 2
+
+
+# Скрипт перенесен в ClearML
+
+# train_model:
+#   stage: train
+#   <<: *setup_venv
+#   script:
+#     - python3 src/train_model.py
+#   artifacts:
+#     paths:
+#       - ranker.pkl
+#       - data_for_training.parquet
+#       - item_features.parquet
+#     expire_in: 20 minutes
+#   retry:
+#     max: 2
+
+
+#Так как через kserve не завелось, пришлось костылить
+load_model:
+  stage: train
+  <<: *setup_venv
+  script:
+    - export AWS_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID
+    - export AWS_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY
+    - aws s3 cp s3://r-mlops-bucket-12-1-1-854415502/best_model/ranker.pkl . --endpoint-url $S3_ENDPOINT_URL
+    - aws s3 cp s3://r-mlops-bucket-12-1-1-854415502/transformed_data/item_features.parquet . --endpoint-url $S3_ENDPOINT_URL
+  artifacts:
+    paths:
+      - ranker.pkl
+      - item_features.parquet
+    expire_in: 20 minutes
+  retry:
+    max: 2
+
+
+
+# Логика юнит теста была в том, что бы проверить живо ли приложение.
+# Этот шаг на данном этапе избыточен
+# pytest:
+#   stage: test
+#   <<: *setup_venv
+#   script:
+#     - pytest . # Запускаем тесты
+
+
+# Использовался скрепный buildkit
+build-rootless:
+  image:
+    name: moby/buildkit:rootless
+    entrypoint: [""]
+  stage: build
+
+  variables:
+    BUILDKITD_FLAGS: --oci-worker-no-process-sandbox
+    TAG: "latest"
+    IMAGE: fastapi-app
+    DOCKER_REGISTRY: "mlops.gitlab.yandexcloud.net:5050"
+    DOCKER_IMAGE: "${DOCKER_REGISTRY}/s14151511/mlops_final_simonov/${IMAGE}:${TAG}"
+
+  before_script:
+    - mkdir -p ~/.docker
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > ~/.docker/config.json
+  script:
+    - |
+      buildctl-daemonless.sh build \
+          --frontend dockerfile.v0 \
+          --local context=. \
+          --local dockerfile=. \
+          --opt oci-mediatypes=true \
+          --opt compression=zstd \
+          --opt compression-level=3 \
+          --opt force-compression=true \
+          --output type=image,name=$CI_REGISTRY_IMAGE:latest,push=true

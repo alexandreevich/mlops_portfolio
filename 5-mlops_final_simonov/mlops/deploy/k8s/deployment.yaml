@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simonov-inference
+  namespace: r-mlops-k8s-12-1-1-854415502
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: simonov-inference
+
+  template:
+    metadata:
+      labels:
+        app: simonov-inference
+
+    spec:
+      imagePullSecrets:
+        - name: gitlab-regcred
+
+      containers:
+        - name: inference
+          image: mlops.gitlab.yandexcloud.net:5050/s14151511/mlops_final_simonov:latest
+
+          ports:
+            - containerPort: 32000
+
+          env:
+            - name: MODEL_PATH
+              value: "/app/ranker.pkl"
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 32000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 32000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

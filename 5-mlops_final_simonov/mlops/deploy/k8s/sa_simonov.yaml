@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sa-simonov
+  namespace: r-mlops-k8s-12-1-1-854415502
+secrets:
+- name: simonov-secret
